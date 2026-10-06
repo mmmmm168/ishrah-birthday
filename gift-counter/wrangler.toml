@@ -1,0 +1,14 @@
+name = "ishrah-birthday-counter"
+main = "worker.js"
+compatibility_date = "2026-10-06"
+
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "GiftCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GiftCounter"]
+
+[vars]
+ALLOWED_ORIGINS = "https://mmmmm168.github.io"

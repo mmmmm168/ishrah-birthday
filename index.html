@@ -698,6 +698,17 @@ body{
     color:#e989a8;
 }
 
+.giftCounterStatus{
+
+    min-height:1.4em;
+
+    margin:-42px 0 35px;
+
+    color:#f5d99d;
+
+    font-size:12px;
+}
+
 
 /* ================= GIFT GRID ================= */
 
@@ -2441,6 +2452,7 @@ body{
             </strong>
         </div>
 
+        <p class="giftCounterStatus" id="giftCounterStatus" role="status" aria-live="polite"></p>
 
         <div class="giftGrid">
 
@@ -2458,7 +2470,7 @@ body{
                 </div>
 
                 <div class="giftOpenedCount" aria-live="polite">
-                    1 OF 3 OPENED
+                    0 OPENED
                 </div>
 
                 <div class="giftEmoji">
@@ -2485,7 +2497,7 @@ body{
                 </div>
 
                 <div class="giftOpenedCount" aria-live="polite">
-                    1 OF 3 OPENED
+                    0 OPENED
                 </div>
 
                 <div class="giftEmoji">
@@ -2512,7 +2524,7 @@ body{
                 </div>
 
                 <div class="giftOpenedCount" aria-live="polite">
-                    1 OF 3 OPENED
+                    0 OPENED
                 </div>
 
                 <div class="giftEmoji">
@@ -2670,6 +2682,7 @@ body{
 
 
 <script src="./memories/manifest.js"></script>
+<script src="./gift-counter-config.js"></script>
 
 <script>
 
@@ -2919,18 +2932,112 @@ const gifts = {
 let selectedGift =
     null;
 
-function openGift(number){
+let giftOpenRequestPending =
+    false;
+
+const giftCounterStatus =
+    document.getElementById("giftCounterStatus");
+
+let latestGiftOpenedCount =
+    0;
+
+function updateGiftOpenedCount(count){
+
+    latestGiftOpenedCount =
+        Math.max(latestGiftOpenedCount,count);
+
+    document
+        .querySelectorAll(".giftOpenedCount")
+        .forEach(
+            badge=>{
+                badge.textContent =
+                    latestGiftOpenedCount+" OPENED";
+            }
+        );
+}
+
+async function requestGiftOpenedCount(path, method="GET"){
+
+    const apiBase =
+        window.GIFT_COUNTER_API;
+
+    if(typeof apiBase!=="string" || !apiBase.startsWith("https://")){
+        throw new Error("The shared gift counter API is not configured.");
+    }
+
+    const baseUrl =
+        apiBase.endsWith("/") ? apiBase : apiBase+"/";
+
+    const response =
+        await fetch(
+            new URL(path,baseUrl),
+            {
+                method,
+                cache:"no-store"
+            }
+        );
+
+    if(!response.ok){
+        throw new Error("The shared gift counter returned HTTP "+response.status+".");
+    }
+
+    const result =
+        await response.json();
+
+    if(!Number.isSafeInteger(result.count) || result.count<0){
+        throw new Error("The shared gift counter returned an invalid total.");
+    }
+
+    return result.count;
+}
+
+async function refreshGiftOpenedCount(){
+
+    try{
+        const count =
+            await requestGiftOpenedCount("count");
+
+        if(count>=latestGiftOpenedCount){
+            updateGiftOpenedCount(count);
+        }
+        giftCounterStatus.textContent="";
+    }catch(error){
+        console.error("Could not load the shared gift counter.",error);
+        giftCounterStatus.textContent =
+            "The shared opened count is unavailable right now.";
+    }
+}
+
+async function openGift(number){
 
     /*
         If one gift has already been opened,
         do nothing.
     */
 
-    if(selectedGift !== null){
+    if(selectedGift !== null || giftOpenRequestPending){
         return;
     }
 
+    giftOpenRequestPending=true;
+    giftCounterStatus.textContent="Updating the shared opened count…";
+
+    let openedCount;
+    try{
+        openedCount =
+            await requestGiftOpenedCount("open","POST");
+    }catch(error){
+        console.error("Could not update the shared gift counter.",error);
+        giftCounterStatus.textContent =
+            "Could not update the shared count. Please try opening the box again.";
+        giftOpenRequestPending=false;
+        return;
+    }
+
+    giftOpenRequestPending=false;
     selectedGift=number;
+    updateGiftOpenedCount(openedCount);
+    giftCounterStatus.textContent="";
 
     const selected =
         document.getElementById(
@@ -2991,6 +3098,9 @@ function openGift(number){
 
     celebration();
 }
+
+refreshGiftOpenedCount();
+setInterval(refreshGiftOpenedCount,15000);
 
 
 /* ================= CLOSE POPUP ================= */
